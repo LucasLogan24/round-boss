@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cleaning Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex min-h-screen">
+
+    <div id="navbar"></div> <!-- ✅ Correct placement -->
+
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white shadow-md px-4 py-6 space-y-4">
+    <h1 class="text-xl font-bold text-blue-600">🧼 CleanOps</h1>
+    <nav class="space-y-2 text-sm">
+      <a href="dashboard.html" class="block text-blue-700 font-semibold">📊 Dashboard</a>
+      <a href="index.html" class="block hover:text-blue-600">➕ Add Customer</a>
+      <a href="customers.html" class="block hover:text-blue-600">👥 Customer List</a>
+      <a href="rounds_database.html" class="block hover:text-blue-600">🔁 Rounds</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-6">
+    <h2 class="text-2xl font-bold mb-4">Dashboard Overview</h2>
+
+    <!-- Week Overview -->
+    <div class="bg-white p-4 rounded-lg shadow mb-6">
+      <h3 class="font-semibold mb-2">Week Overview</h3>
+      <div class="grid grid-cols-7 gap-4 text-center text-sm">
+        <div><div class="h-24 bg-green-300 rounded mb-1"></div>Mon<br>£620</div>
+        <div><div class="h-20 bg-green-300 rounded mb-1"></div>Tue<br>£480</div>
+        <div><div class="h-28 bg-green-300 rounded mb-1"></div>Wed<br>£730</div>
+        <div><div class="h-24 bg-green-400 rounded mb-1 border-2 border-blue-500"></div>Thu<br>£642</div>
+        <div><div class="h-20 bg-green-200 rounded mb-1"></div>Fri<br>£537</div>
+        <div><div class="h-12 bg-purple-300 rounded mb-1"></div>Sat<br>£137</div>
+        <div><div class="h-0 bg-gray-300 rounded mb-1"></div>Sun<br>£0</div>
+      </div>
+    </div>
+
+    <!-- Finances -->
+    <div class="bg-white p-4 rounded-lg shadow">
+      <h3 class="font-semibold mb-2">Finances</h3>
+      <div class="flex justify-between text-sm">
+        <div>
+          <div class="text-gray-500">Payments</div>
+          <div class="text-xl font-bold text-green-600">£1,666</div>
+        </div>
+        <div>
+          <div class="text-gray-500">Invoices</div>
+          <div class="text-xl font-bold text-blue-600">£2,239</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+</body>
+</html>

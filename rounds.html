@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Rounds</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+  <!-- ✅ Navbar goes here -->
+  <div id="navbar"></div>
+
+  <!-- ✅ Main Content -->
+  <main class="flex-1 p-6">
+    <div class="max-w-3xl mx-auto bg-white rounded-lg shadow p-6">
+      <h1 class="text-2xl font-bold mb-4">Manage Rounds</h1>
+
+      <!-- Create Round -->
+      <div class="mb-6">
+        <input 
+          type="text" 
+          id="round-name" 
+          placeholder="e.g. Tuesday – West Route" 
+          class="w-full border border-gray-300 p-2 rounded mb-2"
+        />
+        <button 
+          onclick="createRound()" 
+          class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          Create Round
+        </button>
+      </div>
+
+      <!-- Rounds List -->
+      <div id="rounds-container" class="space-y-4">
+        <h2 class="text-xl font-semibold">All Rounds</h2>
+        <div id="rounds-list"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ✅ JS Scripts -->
+  <script type="module" src="navbar.js"></script>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js'
+
+    const supabaseUrl = 'https://xntdxtuinufkksopjytc.supabase.co'
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhudGR4dHVpbnVma2tzb3BqeXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxNzY5NzksImV4cCI6MjA2ODc1Mjk3OX0.p0uw875QyOhwrORXz0tecqJIU3pH6Um2cH9zAzk62-o'
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const roundInput = document.getElementById('round-name')
+    const roundsList = document.getElementById('rounds-list')
+
+    async function createRound() {
+      const name = roundInput.value.trim()
+      if (!name) return alert('Round name cannot be empty.')
+
+      const { error } = await supabase.from('rounds').insert([{ round_name: name }])
+
+      if (error) {
+        console.error("Error creating round:", error)
+        alert(`Error creating round: ${error.message}`)
+      } else {
+        roundInput.value = ''
+        loadRounds()
+      }
+    }
+
+    async function loadRounds() {
+      const { data, error } = await supabase.from('rounds').select('*').order('created_at', { ascending: false })
+      if (error) {
+        roundsList.innerHTML = `<p class="text-red-500">Failed to load rounds.</p>`
+        return
+      }
+
+      roundsList.innerHTML = data.map(r => `
+        <div class="bg-gray-100 p-4 rounded shadow-sm">
+          <h3 class="text-lg font-semibold">${r.round_name}</h3>
+          <p class="text-sm text-gray-600">Round ID: ${r.id}</p>
+        </div>
+      `).join('')
+    }
+
+    loadRounds()
+    window.createRound = createRound
+  </script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+   <div id="navbar"></div>
+
+  <title>Rounds Database</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-6">
+  <div class="max-w-4xl mx-auto bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold mb-4">Rounds Database</h1>
+
+    <!-- Search -->
+    <input 
+      type="text" 
+      id="search" 
+      placeholder="Search rounds..." 
+      class="w-full border border-gray-300 p-2 rounded mb-4"
+    />
+
+    <!-- Rounds List -->
+    <div id="rounds-list" class="space-y-4 text-sm"></div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js'
+
+    const supabaseUrl = 'https://xntdxtuinufkksopjytc.supabase.co'
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhudGR4dHVpbnVma2tzb3BqeXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMxNzY5NzksImV4cCI6MjA2ODc1Mjk3OX0.p0uw875QyOhwrORXz0tecqJIU3pH6Um2cH9zAzk62-o'
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const searchInput = document.getElementById('search')
+    const roundsList = document.getElementById('rounds-list')
+    let allRounds = []
+
+    async function loadRounds() {
+      const { data, error } = await supabase.from('rounds').select('*').order('created_at', { ascending: false })
+      if (error) return roundsList.innerHTML = `<p class="text-red-500">Failed to load rounds.</p>`
+      allRounds = data
+      displayRounds()
+    }
+
+    function displayRounds() {
+      const search = searchInput.value.toLowerCase()
+      const filtered = allRounds.filter(r => r.round_name?.toLowerCase().includes(search))
+
+      roundsList.innerHTML = filtered.map(round => `
+        <div class="p-4 bg-gray-100 rounded shadow-sm">
+          <div class="flex justify-between items-start">
+            <div>
+              <strong class="text-lg">${round.round_name}</strong><br>
+              <span class="text-gray-500">ID: ${round.id}</span>
+            </div>
+            <div class="space-x-2">
+              <button onclick="editRound('${round.id}', '${round.round_name}')" class="text-blue-600 text-xs bg-blue-100 px-2 py-1 rounded hover:bg-blue-200">Edit</button>
+              <button onclick="deleteRound('${round.id}')" class="text-red-600 text-xs bg-red-100 px-2 py-1 rounded hover:bg-red-200">Delete</button>
+              <button onclick="viewCustomers('${round.id}')" class="text-green-600 text-xs bg-green-100 px-2 py-1 rounded hover:bg-green-200">View Customers</button>
+            </div>
+          </div>
+          <div id="customers-${round.id}" class="mt-2 hidden"></div>
+        </div>
+      `).join('')
+    }
+
+    searchInput.addEventListener('input', displayRounds)
+
+    window.deleteRound = async function(id) {
+      if (!confirm('Are you sure you want to delete this round?')) return
+      const { error } = await supabase.from('rounds').delete().eq('id', id)
+      if (error) return alert('Delete failed.')
+      loadRounds()
+    }
+
+    window.editRound = async function(id, currentName) {
+      const newName = prompt('Edit round name:', currentName)
+      if (!newName || newName === currentName) return
+      const { error } = await supabase.from('rounds').update({ round_name: newName }).eq('id', id)
+      if (error) return alert('Update failed.')
+      loadRounds()
+    }
+
+    window.viewCustomers = async function(roundId) {
+      const container = document.getElementById(`customers-${roundId}`)
+      if (!container.classList.contains('hidden')) {
+        container.classList.add('hidden')
+        container.innerHTML = ''
+        return
+      }
+
+      const { data, error } = await supabase.from('customers').select('*').eq('round_id', roundId)
+      if (error) {
+        container.innerHTML = `<p class="text-red-500 mt-2">Failed to load customers.</p>`
+        return
+      }
+
+      container.classList.remove('hidden')
+      container.innerHTML = data.length === 0
+        ? `<p class="text-gray-500 mt-2">No customers assigned to this round.</p>`
+        : `<ul class="list-disc ml-4 mt-2">${data.map(c => `<li>${c.customer_name} - £${c.balance?.toFixed(2) ?? '0.00'}</li>`).join('')}</ul>`
+    }
+
+    loadRounds()
+  </script>
+</body>
+</html>
