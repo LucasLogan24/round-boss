@@ -7,6 +7,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Map Tailwind tokens to CSS variables (kept intact) */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -47,80 +48,136 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ===== Base (light) =====
+   Keeping light mode, but the app is designed for dark-first.
+   The orange brand stays consistent across modes. */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+
+  /* Surfaces (light) */
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.15 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.15 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --popover-foreground: oklch(0.15 0 0);
+
+  /* Brand — vivid orange */
+  /* primary is the brand, primary-foreground is text on brand */
+  --primary: oklch(0.72 0.19 40);         /* bright orange */
+  --primary-foreground: oklch(0.15 0 0);  /* near-black text on orange */
+
+  /* Supporting tones */
   --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  --secondary-foreground: oklch(0.20 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.55 0 0);
   --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --accent-foreground: oklch(0.20 0 0);
+  --destructive: oklch(0.62 0.20 27);     /* red */
+
+  /* Borders/inputs/ring */
+  --border: oklch(0.92 0 0);
+  --input: oklch(0.92 0 0);
+  --ring: oklch(0.70 0.07 40);            /* orange-tinted ring */
+
+  /* Charts (light) – keep varied hues */
+  --chart-1: oklch(0.68 0.20 41);
+  --chart-2: oklch(0.62 0.12 185);
+  --chart-3: oklch(0.42 0.08 227);
+  --chart-4: oklch(0.84 0.18 84);
+  --chart-5: oklch(0.78 0.19 70);
+
+  /* Sidebar (light) */
   --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.15 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent-foreground: oklch(0.20 0 0);
+  --sidebar-border: oklch(0.92 0 0);
+  --sidebar-ring: var(--ring);
 }
 
+/* ===== Dark (primary mode) =====
+   Low-contrast charcoal surfaces + orange accents + soft borders */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  /* Surfaces (dark) */
+  --background: oklch(0.14 0 0);          /* ~charcoal */
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.20 0 0);                 /* slightly lifted */
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.20 0 0);
+  --popover-foreground: oklch(0.98 0 0);
+
+  /* Brand orange tuned for dark */
+  --primary: oklch(0.72 0.19 40);
+  --primary-foreground: oklch(0.13 0 0);
+
+  /* Supporting tones */
+  --secondary: oklch(0.26 0 0);           /* subtle panel */
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted: oklch(0.26 0 0);
+  --muted-foreground: oklch(0.70 0 0);
+  --accent: oklch(0.26 0 0);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.70 0.19 22);
+
+  /* Borders/inputs/ring */
+  --border: oklch(1 0 0 / 10%);           /* whisper-thin borders */
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.70 0.07 40);            /* orange focus ring */
+
+  /* Charts (dark) */
+  --chart-1: oklch(0.72 0.19 40);         /* brand orange for first series */
+  --chart-2: oklch(0.63 0.17 162);
+  --chart-3: oklch(0.77 0.19 70);
+  --chart-4: oklch(0.63 0.26 304);
+  --chart-5: oklch(0.65 0.24 16);
+
+  /* Sidebar (dark) */
+  --sidebar: oklch(0.20 0 0);
+  --sidebar-foreground: oklch(0.98 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.26 0 0);
+  --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: var(--ring);
 }
 
+/* Base layer */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Utilities to emulate the Framer “orange glow” look without editing tailwind.config */
+@layer utilities {
+  /* Soft orange glow for CTAs/cards */
+  .shadow-glow {
+    box-shadow:
+      0 0 0.5rem color-mix(in oklab, var(--primary) 40%, transparent),
+      0 0 2.5rem color-mix(in oklab, var(--primary) 20%, transparent);
+  }
+
+  /* Background accents */
+  .bg-brand-radial {
+    background-image: radial-gradient(
+      1200px 600px at 80% -10%,
+      color-mix(in oklab, var(--primary) 18%, transparent),
+      transparent 60%
+    );
+  }
+  .bg-brand-linear {
+    background-image: linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--primary) 8%, transparent) 0%,
+      transparent 40%
+    );
   }
 }
