@@ -14,6 +14,7 @@ const nav = [
   { href: '/customers', label: 'Customers' },
   { href: '/rounds', label: 'Rounds' },
   { href: '/payments', label: 'Payments' },
+  { href: "/customers/new", label: "Add Customer" },
 ];
 
 function NavLinks({ onClick }: { onClick?: () => void }) {

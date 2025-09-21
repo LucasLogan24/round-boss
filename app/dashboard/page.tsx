@@ -1,10 +1,13 @@
 // app/page.tsx
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, CalendarDays, CreditCard, Users, ListChecks } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
 import WeeklyRevenueCard from "@/components/charts/weekly-revenue-card";
 
 /* ============================
@@ -34,15 +37,12 @@ interface Customer {
 
 /* ============================
    London-safe date helpers
-   - Ensures "today" and week windows are computed in Europe/London,
-     not the server’s UTC time, which can shift dates around midnight.
 ============================ */
 const TZ = "Europe/London";
 
 function pad(n: number) {
   return n < 10 ? `0${n}` : `${n}`;
 }
-
 function fmtDateTZ(d: Date, timeZone = TZ): string {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
@@ -55,13 +55,8 @@ function fmtDateTZ(d: Date, timeZone = TZ): string {
       if (p.type !== "literal") acc[p.type] = p.value;
       return acc;
     }, {});
-  // en-GB parts: day, month, year
-  return `${parts.year}-${parts.month}-${parts.day}`; // YYYY-MM-DD
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
-
-/** Convert a JS Date to a "zoned midnight" date object (as UTC),
- * so Date math (add days) won’t drift across timezones.
- */
 function toZonedMidnightUTC(d: Date, timeZone = TZ): Date {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
@@ -74,21 +69,16 @@ function toZonedMidnightUTC(d: Date, timeZone = TZ): Date {
       if (p.type !== "literal") acc[p.type] = p.value;
       return acc;
     }, {});
-  // Create a Date that represents local midnight in the target TZ
   return new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
 }
-
-/** Monday start of week in Europe/London */
 function startOfWeekTZ(d = new Date(), timeZone = TZ): Date {
   const zoned = toZonedMidnightUTC(d, timeZone);
   const day = zoned.getUTCDay(); // 0=Sun..6=Sat
-  const diff = day === 0 ? -6 : 1 - day; // shift to Monday
+  const diff = day === 0 ? -6 : 1 - day;
   const start = new Date(zoned);
   start.setUTCDate(zoned.getUTCDate() + diff);
-  return start; // still a "zoned midnight" Date anchored in UTC
+  return start;
 }
-
-/** List 7 YYYY-MM-DD strings (Mon..Sun) from a zoned Monday Date */
 function weekIsoDatesFromZonedMonday(zonedMondayUTC: Date): string[] {
   const arr: string[] = [];
   for (let i = 0; i < 7; i++) {
@@ -109,43 +99,46 @@ const GBP0 = new Intl.NumberFormat("en-GB", {
 });
 
 export default async function DashboardPage() {
-  const ownerId = process.env.NEXT_PUBLIC_DEMO_OWNER_ID || "demo-owner";
+  // ✅ per-request server client
+  const supabase = createServerComponentClient({ cookies });
 
-  // Compute ISO date strings safely in Europe/London
+  // 🔐 require auth for this page
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login?next=/");
+
+  const ownerId = user.id;
+
+  // Dates (Europe/London)
   const today = new Date();
   const todayStr = fmtDateTZ(today, TZ);
 
-  const weekStart = startOfWeekTZ(today, TZ);      // zoned Monday (UTC-anchored)
-  const weekEnd = new Date(weekStart);             // exclusive end
-  weekEnd.setUTCDate(weekStart.getUTCDate() + 7);
+  const weekStart = startOfWeekTZ(today, TZ);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 7); // exclusive
 
   const weekStartStr = `${weekStart.getUTCFullYear()}-${pad(weekStart.getUTCMonth() + 1)}-${pad(weekStart.getUTCDate())}`;
   const weekEndStr   = `${weekEnd.getUTCFullYear()}-${pad(weekEnd.getUTCMonth() + 1)}-${pad(weekEnd.getUTCDate())}`;
 
   const [jobsTodayRes, jobsWeekRes, paymentsWeekRes, customersRes] = await Promise.all([
-    supabase
-      .from("jobs")
+    supabase.from("jobs")
       .select("id, price, status, scheduled_date")
       .eq("scheduled_date", todayStr)
       .eq("owner_id", ownerId),
 
-    supabase
-      .from("jobs")
+    supabase.from("jobs")
       .select("id, price, status, scheduled_date")
       .gte("scheduled_date", weekStartStr)
       .lt("scheduled_date", weekEndStr)
       .eq("owner_id", ownerId),
 
-    supabase
-      .from("payments")
+    supabase.from("payments")
       .select("id, amount, method, date, created_at")
       .eq("owner_id", ownerId)
       .gte("date", weekStartStr)
       .lt("date", weekEndStr)
       .order("date", { ascending: false }),
 
-    supabase
-      .from("customers")
+    supabase.from("customers")
       .select("id, is_active")
       .eq("owner_id", ownerId)
       .eq("is_active", true),
@@ -163,13 +156,9 @@ export default async function DashboardPage() {
 
   const completedToday = jobsToday.filter((j) => j.status === "done").length;
   const revenueToday = jobsToday.reduce<number>((sum, j) => sum + (j.price || 0), 0);
+  const paymentsTotal = paymentsThisWeek.reduce<number>((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  const paymentsTotal = paymentsThisWeek.reduce<number>(
-    (sum, p) => sum + (Number(p.amount) || 0),
-    0
-  );
-
-  // Build weekly revenue data (sum job.price per scheduled day)
+  // Weekly revenue (sum job.price per day)
   const weekDays = weekIsoDatesFromZonedMonday(weekStart);
   const map = new Map<string, number>(weekDays.map((iso) => [iso, 0]));
   for (const j of jobsThisWeek) {
@@ -181,7 +170,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Hero / intro card with orange sheen */}
+      {/* Hero / intro card */}
       <section className="relative overflow-hidden rounded-3xl border border-border bg-card/60 p-6">
         <div className="absolute inset-0 bg-brand-linear" />
         <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -202,7 +191,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      {/* Top 4 KPI cards */}
+      {/* KPI tiles */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -270,10 +259,7 @@ export default async function DashboardPage() {
             ) : (
               <ul className="space-y-2">
                 {jobsToday.map((j) => (
-                  <li
-                    key={j.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
+                  <li key={j.id} className="flex items-center justify-between rounded-lg border p-3">
                     <div className="flex items-center gap-2">
                       <Badge
                         variant={
@@ -288,9 +274,7 @@ export default async function DashboardPage() {
                       </Badge>
                       <span className="text-sm">Job #{j.id.slice(0, 6)}</span>
                     </div>
-                    <div className="text-sm font-medium">
-                      {GBP0.format(j.price || 0)}
-                    </div>
+                    <div className="text-sm font-medium">{GBP0.format(j.price || 0)}</div>
                   </li>
                 ))}
               </ul>
@@ -315,16 +299,11 @@ export default async function DashboardPage() {
             ) : (
               <ul className="space-y-2">
                 {paymentsThisWeek.slice(0, 6).map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
+                  <li key={p.id} className="flex items-center justify-between rounded-lg border p-3">
                     <span className="text-sm">
                       {new Date(p.date).toLocaleDateString("en-GB")} • {p.method || "—"}
                     </span>
-                    <span className="text-sm font-medium">
-                      {GBP0.format(Number(p.amount))}
-                    </span>
+                    <span className="text-sm font-medium">{GBP0.format(Number(p.amount))}</span>
                   </li>
                 ))}
               </ul>
