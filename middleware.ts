@@ -1,35 +1,63 @@
+// middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
+  // Always create a response we can mutate cookies on
+  const res = NextResponse.next({ request: { headers: req.headers } });
 
-  // Tie Supabase to request/response cookies (handles refresh tokens too)
-  const supabase = createMiddlewareClient({ req, res });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return req.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          res.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          res.cookies.set({ name, value: "", ...options });
+        },
+      },
+    }
+  );
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const { pathname } = req.nextUrl;
+  const pathname = req.nextUrl.pathname;
 
-  // Adjust this list to cover the parts of your app that require login
-  const protectedPrefixes = ["/dashboard", "/today", "/customers", "/rounds", "/payments"];
+  const isPublic =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/api/auth") ||
+    pathname === "/favicon.ico" ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/public");
 
-  const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));
-  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/auth");
-
-  if (!session && isProtected && !isAuthRoute) {
+  // Not signed in → send to login
+  if (!session && !isPublic) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname + req.nextUrl.search);
+    url.searchParams.set("redirectedFrom", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // Already signed in and visiting /login → send to dashboard
+  if (session && pathname.startsWith("/login")) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
   return res;
 }
 
-// Run on everything except static assets/images
+// Adjust to your routes; this protects everything except static assets:
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

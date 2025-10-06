@@ -1,92 +1,82 @@
+// app/login/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSupabase } from "@/components/providers/supabase-provider";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
 
 export default function LoginPage() {
+  const supabase = useSupabase();
   const router = useRouter();
-  const search = useSearchParams();
-  const next = search.get("next") || "/dashboard";
-
-  const supabase = createClientComponentClient();
+  const params = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // If already logged in, skip the form
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!mounted) return;
-      if (session) {
-        router.replace(next);
-        router.refresh();
-      }
-    })();
-    return () => { mounted = false; };
-  }, [supabase, router, next]);
+  const redirectTarget = params.get("redirectedFrom") || "/";
 
-  async function onSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setLoading(true);
+    setSubmitting(true);
+    setErrorMsg(null);
 
-    const res = await fetch("/api/auth/sign-in", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
     });
 
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      setError(j?.error ?? "Sign in failed.");
-      setLoading(false);
+    if (error) {
+      setSubmitting(false);
+      setErrorMsg(error.message);
       return;
     }
 
-    // Success — server wrote the cookies; now navigate
-    router.replace(next);
+    // Navigate away so middleware runs on the next request
+    router.replace(redirectTarget);
+    // Ensure the server-side session is re-read and cookies are synced
     router.refresh();
   }
 
   return (
-    <div className="mx-auto max-w-md">
-      <Card className="rounded-3xl border border-border/60 bg-card/60">
-        <CardHeader>
-          <CardTitle>Log in</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full rounded-2xl border border-border bg-background p-3 outline-none focus:ring-2 focus:ring-primary/70"
-              autoFocus
-              required
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full rounded-2xl border border-border bg-background p-3 outline-none focus:ring-2 focus:ring-primary/70"
-              required
-            />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full shadow-glow" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm space-y-3 rounded-xl border p-6 shadow-sm"
+      >
+        <h2 className="text-lg font-semibold">Log in</h2>
+
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="admin@roundboss.com"
+          className="w-full rounded-md border px-3 py-2 bg-slate-50"
+          required
+        />
+
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+          className="w-full rounded-md border px-3 py-2 bg-slate-50"
+          required
+        />
+
+        {errorMsg && (
+          <p className="text-sm text-red-600">{errorMsg}</p>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full rounded-md bg-blue-600 px-4 py-2 text-white disabled:opacity-60"
+        >
+          {submitting ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
     </div>
   );
 }

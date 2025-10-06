@@ -1,14 +1,19 @@
-// app/page.tsx
+// app/dashboard/page.tsx
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getServerSupabase } from "@/app/server-supabase";
 
+import AppShell from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, CalendarDays, CreditCard, Users, ListChecks } from "lucide-react";
 import WeeklyRevenueCard from "@/components/charts/weekly-revenue-card";
+
+/* ============================
+   Force fresh data on each hit
+============================ */
+export const revalidate = 0;
 
 /* ============================
    Types
@@ -74,7 +79,7 @@ function toZonedMidnightUTC(d: Date, timeZone = TZ): Date {
 function startOfWeekTZ(d = new Date(), timeZone = TZ): Date {
   const zoned = toZonedMidnightUTC(d, timeZone);
   const day = zoned.getUTCDay(); // 0=Sun..6=Sat
-  const diff = day === 0 ? -6 : 1 - day;
+  const diff = day === 0 ? -6 : 1 - day; // Monday start
   const start = new Date(zoned);
   start.setUTCDate(zoned.getUTCDate() + diff);
   return start;
@@ -99,14 +104,19 @@ const GBP0 = new Intl.NumberFormat("en-GB", {
 });
 
 export default async function DashboardPage() {
-  // ✅ per-request server client
-  const supabase = createServerComponentClient({ cookies });
+  // ✅ Read session via server helper (handles cookies correctly)
+  const supabase = await getServerSupabase();
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-  // 🔐 require auth for this page
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login?next=/");
+  if (!session || sessionError) {
+    // Middleware should catch this, but keep a defensive redirect
+    redirect("/login?redirectedFrom=/dashboard");
+  }
 
-  const ownerId = user.id;
+  const ownerId = session.user.id;
 
   // Dates (Europe/London)
   const today = new Date();
@@ -116,29 +126,37 @@ export default async function DashboardPage() {
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekStart.getUTCDate() + 7); // exclusive
 
-  const weekStartStr = `${weekStart.getUTCFullYear()}-${pad(weekStart.getUTCMonth() + 1)}-${pad(weekStart.getUTCDate())}`;
-  const weekEndStr   = `${weekEnd.getUTCFullYear()}-${pad(weekEnd.getUTCMonth() + 1)}-${pad(weekEnd.getUTCDate())}`;
+  const weekStartStr = `${weekStart.getUTCFullYear()}-${pad(weekStart.getUTCMonth() + 1)}-${pad(
+    weekStart.getUTCDate()
+  )}`;
+  const weekEndStr = `${weekEnd.getUTCFullYear()}-${pad(weekEnd.getUTCMonth() + 1)}-${pad(
+    weekEnd.getUTCDate()
+  )}`;
 
   const [jobsTodayRes, jobsWeekRes, paymentsWeekRes, customersRes] = await Promise.all([
-    supabase.from("jobs")
+    supabase
+      .from("jobs")
       .select("id, price, status, scheduled_date")
       .eq("scheduled_date", todayStr)
       .eq("owner_id", ownerId),
 
-    supabase.from("jobs")
+    supabase
+      .from("jobs")
       .select("id, price, status, scheduled_date")
       .gte("scheduled_date", weekStartStr)
       .lt("scheduled_date", weekEndStr)
       .eq("owner_id", ownerId),
 
-    supabase.from("payments")
+    supabase
+      .from("payments")
       .select("id, amount, method, date, created_at")
       .eq("owner_id", ownerId)
       .gte("date", weekStartStr)
       .lt("date", weekEndStr)
       .order("date", { ascending: false }),
 
-    supabase.from("customers")
+    supabase
+      .from("customers")
       .select("id, is_active")
       .eq("owner_id", ownerId)
       .eq("is_active", true),
@@ -169,155 +187,162 @@ export default async function DashboardPage() {
   const weeklyRevenueData = weekDays.map((iso) => ({ date: iso, revenue: map.get(iso) || 0 }));
 
   return (
-    <div className="space-y-6">
-      {/* Hero / intro card */}
-      <section className="relative overflow-hidden rounded-3xl border border-border bg-card/60 p-6">
-        <div className="absolute inset-0 bg-brand-linear" />
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-semibold">Today’s Round</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Keep your rounds flowing. Save notes, skip jobs, reflow automatically.
-            </p>
+    <AppShell>
+      <div className="space-y-6">
+        {/* Hero / intro card */}
+        <section className="relative overflow-hidden rounded-3xl border border-border bg-card/60 p-6">
+          <div className="absolute inset-0 bg-brand-linear" />
+          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold">Today’s Round</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Keep your rounds flowing. Save notes, skip jobs, reflow automatically.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button className="shadow-glow">Start Round</Button>
+              <Button variant="outline" asChild>
+                <Link href="/customers" className="inline-flex items-center">
+                  View Customers <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link href="/customers/new" className="inline-flex items-center">
+                  Add Customer <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button className="shadow-glow">Start Round</Button>
-            <Button variant="outline" asChild>
-              <Link href="/customers" className="inline-flex items-center">
-                View Customers <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
+        </section>
+
+        {/* KPI tiles */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Jobs Today</CardTitle>
+              <ListChecks className="h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{jobsToday.length}</div>
+              <p className="text-xs text-muted-foreground">{completedToday} completed</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
+              <Users className="h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{activeCustomers.length}</div>
+              <p className="text-xs text-muted-foreground">across all rounds</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Revenue (Today)</CardTitle>
+              <CreditCard className="h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{GBP0.format(revenueToday)}</div>
+              <p className="text-xs text-muted-foreground">based on job prices</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Payments (This Week)</CardTitle>
+              <CalendarDays className="h-4 w-4" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{GBP0.format(paymentsTotal)}</div>
+              <p className="text-xs text-muted-foreground">received</p>
+            </CardContent>
+          </Card>
         </div>
-      </section>
 
-      {/* KPI tiles */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Jobs Today</CardTitle>
-            <ListChecks className="h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{jobsToday.length}</div>
-            <p className="text-xs text-muted-foreground">{completedToday} completed</p>
-          </CardContent>
-        </Card>
+        {/* Weekly Revenue graph */}
+        <WeeklyRevenueCard
+          data={weeklyRevenueData}
+          currency="GBP"
+          title="Revenue (This Week)"
+          description={`Day-by-day (Mon–Sun) for the week starting ${weekDays[0]}`}
+          showGrid
+        />
 
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
-            <Users className="h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activeCustomers.length}</div>
-            <p className="text-xs text-muted-foreground">across all rounds</p>
-          </CardContent>
-        </Card>
+        {/* Bottom two cards */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Today’s Jobs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {jobsToday.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No jobs scheduled today.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {jobsToday.map((j) => (
+                    <li key={j.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            j.status === "done"
+                              ? "default"
+                              : j.status === "skipped"
+                              ? "secondary"
+                              : "outline"
+                          }
+                        >
+                          {j.status || "pending"}
+                        </Badge>
+                        <span className="text-sm">Job #{j.id.slice(0, 6)}</span>
+                      </div>
+                      <div className="text-sm font-medium">{GBP0.format(j.price || 0)}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="pt-2">
+                <Button variant="outline" asChild>
+                  <Link href="/today" className="inline-flex items-center">
+                    Go to Today <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Revenue (Today)</CardTitle>
-            <CreditCard className="h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{GBP0.format(revenueToday)}</div>
-            <p className="text-xs text-muted-foreground">based on job prices</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Payments (This Week)</CardTitle>
-            <CalendarDays className="h-4 w-4" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{GBP0.format(paymentsTotal)}</div>
-            <p className="text-xs text-muted-foreground">received</p>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Payments</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {paymentsThisWeek.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No payments yet this week.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {paymentsThisWeek.slice(0, 6).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <span className="text-sm">
+                        {new Date(p.date).toLocaleDateString("en-GB")} • {p.method || "—"}
+                      </span>
+                      <span className="text-sm font-medium">{GBP0.format(Number(p.amount))}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="pt-2">
+                <Button variant="outline" asChild>
+                  <Link href="/payments" className="inline-flex items-center">
+                    View all <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      {/* Weekly Revenue graph */}
-      <WeeklyRevenueCard
-        data={weeklyRevenueData}
-        currency="GBP"
-        title="Revenue (This Week)"
-        description={`Day-by-day (Mon–Sun) for the week starting ${weekDays[0]}`}
-        showGrid
-      />
-
-      {/* Bottom two cards */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Today’s Jobs</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {jobsToday.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No jobs scheduled today.</p>
-            ) : (
-              <ul className="space-y-2">
-                {jobsToday.map((j) => (
-                  <li key={j.id} className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={
-                          j.status === "done"
-                            ? "default"
-                            : j.status === "skipped"
-                            ? "secondary"
-                            : "outline"
-                        }
-                      >
-                        {j.status || "pending"}
-                      </Badge>
-                      <span className="text-sm">Job #{j.id.slice(0, 6)}</span>
-                    </div>
-                    <div className="text-sm font-medium">{GBP0.format(j.price || 0)}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="pt-2">
-              <Button variant="outline" asChild>
-                <Link href="/today" className="inline-flex items-center">
-                  Go to Today <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Payments</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {paymentsThisWeek.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No payments yet this week.</p>
-            ) : (
-              <ul className="space-y-2">
-                {paymentsThisWeek.slice(0, 6).map((p) => (
-                  <li key={p.id} className="flex items-center justify-between rounded-lg border p-3">
-                    <span className="text-sm">
-                      {new Date(p.date).toLocaleDateString("en-GB")} • {p.method || "—"}
-                    </span>
-                    <span className="text-sm font-medium">{GBP0.format(Number(p.amount))}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="pt-2">
-              <Button variant="outline" asChild>
-                <Link href="/payments" className="inline-flex items-center">
-                  View all <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    </AppShell>
   );
 }

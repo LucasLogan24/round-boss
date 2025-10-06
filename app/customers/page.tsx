@@ -1,7 +1,8 @@
 // app/customers/page.tsx
-import { cookies } from "next/headers";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { redirect } from "next/navigation";
+import { getServerSupabase } from "@/app/server-supabase";
 
+import AppShell from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -19,96 +20,81 @@ interface CustomerRow {
 }
 
 const PAGE_SIZE = 20;
+export const revalidate = 0;
 
 export default async function CustomersPage({
-  // 👇 Next can pass searchParams as a Promise now
   searchParams,
 }: {
+  // Next 15 may pass this as a Promise during streaming
   searchParams: Promise<{ page?: string }>;
 }) {
-  // ✅ await searchParams before using it
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp?.page || "1", 10) || 1);
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
-  // ✅ await cookies() (can be async in newer Next)
-  const cookieStore = await cookies();
+  const supabase = await getServerSupabase();
 
-  // Adapter for Supabase SSR client
-  const cookieAdapter = {
-    get(name: string) {
-      return cookieStore.get(name)?.value;
-    },
-    set(_name: string, _value: string, _options: CookieOptions) {
-      /* no-op in server components */
-    },
-    remove(_name: string, _options: CookieOptions) {
-      /* no-op in server components */
-    },
-  } as {
-    get(name: string): string | undefined;
-    set(name: string, value: string, options: CookieOptions): void;
-    remove(name: string, options: CookieOptions): void;
-  };
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: cookieAdapter }
-  );
-
-  // ✅ More secure on the server than getSession()
+  // Auth (defensive; middleware already protects)
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const userId = user?.id ?? null;
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) {
+    redirect("/login?redirectedFrom=/customers");
+  }
+  const userId = session.user.id;
 
   let rows: CustomerRow[] = [];
   let total = 0;
 
-  if (userId) {
-    const { data, count } = await supabase
-      .from("customers")
-      .select(
-        "id, owner_id, name, address_line1, city, postcode, price, is_active",
-        { count: "exact" }
-      )
-      .eq("owner_id", userId)
-      .order("name", { ascending: true })
-      .range(from, to);
+  const { data, count, error } = await supabase
+    .from("customers")
+    .select(
+      "id, owner_id, name, address_line1, city, postcode, price, is_active",
+      { count: "exact" }
+    )
+    .eq("owner_id", userId)
+    .order("name", { ascending: true })
+    .range(from, to);
 
-    rows = data || [];
-    total = count ?? rows.length;
+  if (error) {
+    console.error("customers list error:", error);
   }
 
+  rows = data || [];
+  total = count ?? rows.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Customers</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <CustomersTable rows={rows} />
-        </Table>
+    <AppShell>
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <CardTitle>Customers</CardTitle>
+          <Button asChild>
+            <a href="/customers/new">Add Customer</a>
+          </Button>
+        </CardHeader>
 
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/customers?page=${Math.max(1, page - 1)}`}>Prev</a>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <a href={`/customers?page=${Math.min(totalPages, page + 1)}`}>Next</a>
-            </Button>
+        <CardContent>
+          <Table>
+            <CustomersTable rows={rows} />
+          </Table>
+
+          <div className="mt-4 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <a href={`/customers?page=${Math.max(1, page - 1)}`}>Prev</a>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a href={`/customers?page=${Math.min(totalPages, page + 1)}`}>Next</a>
+              </Button>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </AppShell>
   );
 }
